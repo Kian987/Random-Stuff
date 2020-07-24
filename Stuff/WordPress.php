@@ -1,3 +1,5 @@
+<?php
+
 function Yeah()
 {
     $backlist = array('http://www.mediafire.com', 'http://google.com');
