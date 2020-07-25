@@ -1,51 +1,45 @@
 <?php
 
-// It doesn't have to be a function. Just run it
+$content = <<<HTML
+<ul>
+    <li><a href="https://katamaze.com">https://katamaze.com</a></li>
+    <li><a href="https://katamaze.it">https://katamaze.it</a></li>
+    <li><a href="https://katamaze.com"><strong>https://katamaze.com</strong></a></li>
+    <li><a href="http://katamaze.com"><strong>http://katamaze.com</strong></a></li>
+    <li><a href="https://katamaze.com"><img src="path/to/image.png"></a></li>
+</ul>
+HTML;
 
-function Yeah()
+echo 'Blacklisting <strong>katamaze.com</strong> from the list:' . PHP_EOL;
+echo $content;
+echo '<hr>';
+echo 'Output:' . PHP_EOL;
+echo ClearURL($content, array('katamaze.com'), '**CENSORED**');
+
+function ClearURL($content, $blacklist = false, $replaceWith = false)
 {
-    $backlist = array('http://www.mediafire.com', 'http://google.com'); // Enter URLs (scheme eg. http + host eg. google.com) you want to remove from posts
-    $replaceWith = '**CENSORED**'; // Every time the script finds a match (eg. http://google.com/whatever, http://google.com/hello-world) it replaces the entire URL block with the given string. If you don't want to replace anything just set this variable to false
+    if (!$blacklist): return $content; endif;
 
-    $dom = new \DomDocument();
+    $dom = new DomDocument();
     $dom->encoding = 'utf-8';
+    $dom->loadHTML(utf8_decode($content), LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
 
-    // I'm selecting from database all posts (id and post_content columns) so that I can scan everything to "blacklist" the given URLs. Here I'm using PDO and an object where I have already established a connection with database. Change it accordingly
-    $query = $this->mysql->prepare('SELECT id, post_content FROM wp_post');
-    $query->execute();
-    while($row = $query->fetch())
+    $elements = $dom->getElementsByTagName('a');
+    $i = $elements->length - 1;
+
+    while ($i > -1)
     {
-        // I parse post_content with DOM
-        $dom->loadHTML(utf8_decode($row->post_content), LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        $element = $elements->item($i);
+        $url = parse_url($element->getAttribute('href'))['host'];
 
-        // Finding all <a href=""></a>
-        $elements = $dom->getElementsByTagName('a');
-
-        // Counting how many <a href=""></a> I found in this post_content...
-        $i = $elements->length - 1;
-
-        // ... so that I can analyze each of them
-        while ($i > -1)
+        if (in_array($url, $blacklist))
         {
-            // Retreiving the actual value of href attribute
-            $element = $elements->item($i);
-            $url = $element->getAttribute('href');
-
-            // If the given URL is part of your $blacklist I replace it with your $replaceWith (eg. **CENSORED**)
-            if (in_array(str_replace('%5C%22', '', $url), $backlist))
-            {
-                $newelement = $dom->createTextNode($replaceWith);
-                $element->parentNode->replaceChild($newelement, $element);
-            }
-
-            // Repeat for all other URLs in post_content
-            $i--;
+            $replace = $dom->createTextNode($replaceWith);
+            $element->parentNode->replaceChild($replace, $element);
         }
 
-        // At this point I analyzed all URLs removing blacklisted domains. It's now time to save the output in wp_post with this query
-        $update = $this->mysql->prepare('UPDATE wp_post SET post_content = :post_content WHERE id = :id LIMIT 1');
-        $update->execute(array('post_content' => $dom->saveHTML(), 'id' => $row->id));
-
-        // Repeat for all other records in wp_post
+        $i--;
     }
+
+    return $dom->saveHTML();
 }
